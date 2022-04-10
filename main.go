@@ -175,8 +175,10 @@ var cmdDatetime = &cobra.Command{
 
 				port.SetReadTimeout(time.Second * 1)
 
+				totalReadBytes := 0
 				for {
-					n, err := port.Read(buff)
+					readbuff := make([]byte, 13)
+					n, err := port.Read(readbuff)
 					if err != nil {
 						log.Fatal(err)
 						break
@@ -185,7 +187,12 @@ var cmdDatetime = &cobra.Command{
 						fmt.Println("\nEOF")
 						break
 					}
-					if n == 13 {
+					fmt.Printf("Received %v bytes\n", n)
+					for i := 0; i < n; i++ {
+						buff[totalReadBytes] = readbuff[i]
+						totalReadBytes++
+					}
+					if totalReadBytes == 13 {
 						break
 					}
 				}
@@ -316,6 +323,7 @@ func getDataPoint() DataPoint {
 	log.Printf("querying serial port %s", serialport)
 
 	buff := make([]byte, 13)
+	buffIndex := 0
 
 	if emulate {
 		buff = []byte("\x8e\x11\x82\x06\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c")
@@ -338,19 +346,21 @@ func getDataPoint() DataPoint {
 		}
 		fmt.Printf("Sent %v bytes\n", n)
 
-		port.SetReadTimeout(time.Second * 1)
+		port.SetReadTimeout(time.Second * 5)
 
 		for {
-			n, err := port.Read(buff)
+			readBuff := make([]byte, 13)
+			n, err := port.Read(readBuff)
 			if err != nil {
 				log.Fatal(err)
 				break
 			}
-			if n == 0 {
-				fmt.Println("\nEOF")
-				break
+			fmt.Printf("Received %v bytes: %v\n", n, readBuff[:n])
+			for i := 0; i < n; i++ {
+				buff[buffIndex] = readBuff[i]
+				buffIndex++
 			}
-			if n == 13 {
+			if buffIndex == 13 {
 				break
 			}
 		}
@@ -394,6 +404,7 @@ func readSerialNumber() string {
 	log.Printf("querying serial port %s", serialport)
 
 	buff := make([]byte, 13)
+	buffIndex := 0
 
 	if emulate {
 		buff = []byte("1533A5012345\x71")
@@ -419,16 +430,19 @@ func readSerialNumber() string {
 		port.SetReadTimeout(time.Second * 1)
 
 		for {
-			n, err := port.Read(buff)
+			readbuff := make([]byte, 13)
+			n, err := port.Read(readbuff)
 			if err != nil {
 				log.Fatal(err)
 				break
 			}
-			if n == 0 {
-				fmt.Println("\nEOF")
-				break
+			fmt.Printf("Received %v bytes: %v\n", n, readbuff[:n])
+			for i := 0; i < n; i++ {
+				buff[buffIndex] = readbuff[i]
+				buffIndex++
 			}
-			if n == 13 {
+			if buffIndex == 13 {
+				fmt.Printf("Received complete response: %v\n", buff)
 				break
 			}
 		}
@@ -455,6 +469,7 @@ func readProtocol() string {
 	log.Printf("querying serial port %s", serialport)
 
 	buff := make([]byte, 13)
+	buffIndex := 0
 
 	if emulate {
 		buff = []byte("111-23\x00\x00\x00\x00\x00\x00\x25")
@@ -480,16 +495,19 @@ func readProtocol() string {
 		port.SetReadTimeout(time.Second * 1)
 
 		for {
-			n, err := port.Read(buff)
+			readBuff := make([]byte, 13)
+			n, err := port.Read(readBuff)
 			if err != nil {
 				log.Fatal(err)
 				break
 			}
-			if n == 0 {
-				fmt.Println("\nEOF")
-				break
+			fmt.Printf("Received %v bytes: %v\n", n, readBuff[:n])
+			for i := 0; i < n; i++ {
+				buff[buffIndex] = readBuff[i]
+				buffIndex++
 			}
-			if n == 13 {
+			if buffIndex == 13 {
+				fmt.Printf("Received complete command: %v\n", buff)
 				break
 			}
 		}
@@ -530,7 +548,10 @@ var cmdEmulator = &cobra.Command{
 			log.Fatal(err)
 		}
 
+		port.SetReadTimeout(time.Second * 5)
+
 		buff := make([]byte, 5)
+		buffIndex := 0
 
 		rand.Seed(time.Now().UnixNano())
 
@@ -539,115 +560,135 @@ var cmdEmulator = &cobra.Command{
 		var lastReading int64 = 0
 
 		for {
-			n, err := port.Read(buff)
+			readbuff := make([]byte, 5)
+			readbuffIndex := 0
+			n, err := port.Read(readbuff)
 			if err != nil {
 				log.Fatal(err)
 				break
 			}
-			if n == 0 {
-				fmt.Println("\nEOF")
-				break
-			}
-			if n == 5 {
-				fmt.Printf("Received %v bytes\n", n)
-
-				chksum := 0
-				for i := 0; i < 3; i++ {
-					chksum += int(buff[i])
-				}
-				chksum = chksum % 256
-				if byte(chksum) != buff[4] {
-					fmt.Printf("invalid checksum: expected 0x%02x, got 0x%02x\n", chksum, buff[4])
-				}
-
-				var response []byte = nil
-
-				switch buff[2] {
-				case 0x02: // read data
-					fmt.Printf("Read data\n")
-					response = make([]byte, 13)
-					power := 4500.0 * rand.Float32()
-
-					udc := float32(500.0)
-					idc := power / udc
-					response[0] = byte((udc - 100.0) / 2.8)
-					response[1] = byte(idc / 0.08)
-
-					uac := float32(230.0)
-					iac := power / uac
-					response[2] = byte(uac - 100.0)
-					response[3] = byte(iac / 0.120)
-
-					temp := 60*rand.Float32() - 20 // between -20°C/+40°C
-					response[4] = byte(temp + 40)
-
-					response[5] = 0
-
-					now := time.Now().UnixMilli()
-					if lastReading > 0 {
-						millis := now - lastReading
-						energy := power * float32(millis) / 1000.0 / 3600.0 / 1000.0
-						energyDay += energy
-						energyTotal += energy
+			if n != 0 {
+				fmt.Printf("Received %v bytes: %v\n", n, readbuff[:n])
+				for readbuffIndex = 0; readbuffIndex < n; readbuffIndex++ {
+					if readbuff[readbuffIndex] == 0 {
+						buffIndex = 0
 					}
-					lastReading = now
-
-					response[6] = byte(energyDay * 1000.0 / 256.0)
-					response[7] = byte(energyDay * 1000.0)
-					response[8] = byte(energyTotal / 256.0)
-					response[9] = byte(energyTotal)
-
-				case 0x06: // read time
-					fmt.Printf("Read time\n")
-					response = make([]byte, 13)
-					now := time.Now().Local()
-					response[0] = byte(now.Year() - 2000)
-					response[1] = byte(now.Month())
-					response[2] = byte(now.Day())
-					response[3] = byte(now.Hour())
-					response[4] = byte(now.Minute())
-				case 0x50: // set year
-					fmt.Printf("Set year\n")
-					fmt.Printf(" --> %v\n", int(buff[3])+2000)
-				case 0x51: // set month
-					fmt.Printf("Set month\n")
-					fmt.Printf(" --> %v\n", int(buff[3]))
-				case 0x52: // set day
-					fmt.Printf("Set day\n")
-					fmt.Printf(" --> %v\n", int(buff[3]))
-				case 0x53: // set hour
-					fmt.Printf("Set hour\n")
-					fmt.Printf(" --> %v\n", int(buff[3]))
-				case 0x54: // set minute
-					fmt.Printf("Set minute\n")
-					fmt.Printf(" --> %v\n", int(buff[3]))
-				case 0x08: // read serial
-					fmt.Printf("Read serial number\n")
-					response = []byte("1533A5012345\x00")
-				case 0x09: // read protocol + firmware
-					fmt.Printf("Read protocol + firmware\n")
-					response = []byte("111-23\x00\x00\x00\x00\x00\x00\x00")
-				default:
-					fmt.Printf("Unknown command: %v\n", buff)
+					buff[buffIndex] = readbuff[readbuffIndex]
+					buffIndex++
+					if buffIndex == 5 {
+						break
+					}
 				}
 
-				if response != nil {
-					if len(response) != 13 {
-						log.Fatalf("response array has length %v, expected 13\n", len(response))
-					}
+				if buffIndex == 5 {
+					fmt.Printf("Received complete command: %v\n", buff)
+					buffIndex = 0
 
-					chksum = 0
-					for i := 0; i < 12; i++ {
-						chksum += int(response[i])
+					chksum := 0
+					for i := 0; i < 4; i++ {
+						chksum += int(buff[i])
 					}
 					chksum = chksum % 256
-					response[12] = byte(chksum)
-
-					n, err := port.Write(response)
-					if err != nil {
-						log.Fatal(err)
+					if byte(chksum) != buff[4] {
+						fmt.Printf("invalid checksum: expected 0x%02x, got 0x%02x\n", chksum, buff[4])
 					}
-					fmt.Printf("Sent %v bytes\n", n)
+
+					var response []byte = nil
+
+					switch buff[2] {
+					case 0x02: // read data
+						fmt.Printf("Read data\n")
+						response = make([]byte, 13)
+						power := 4500.0 * rand.Float32()
+
+						udc := float32(500.0)
+						idc := power / udc
+						response[0] = byte((udc - 100.0) / 2.8)
+						response[1] = byte(idc / 0.08)
+
+						uac := float32(230.0)
+						iac := power / uac
+						response[2] = byte(uac - 100.0)
+						response[3] = byte(iac / 0.120)
+
+						temp := 60*rand.Float32() - 20 // between -20°C/+40°C
+						response[4] = byte(temp + 40)
+
+						response[5] = 0
+
+						now := time.Now().UnixMilli()
+						if lastReading > 0 {
+							millis := now - lastReading
+							energy := power * float32(millis) / 1000.0 / 3600.0 / 1000.0
+							energyDay += energy
+							energyTotal += energy
+							fmt.Printf("Energy %v Wh in %v ms\n", energy, millis)
+							fmt.Printf("Updated energyDay=%v\n", energyDay)
+						}
+						lastReading = now
+
+						response[6] = byte(energyDay * 1000.0 / 256.0)
+						response[7] = byte(energyDay * 1000.0)
+						response[8] = byte(energyTotal / 256.0)
+						response[9] = byte(energyTotal)
+
+					case 0x06: // read time
+						fmt.Printf("Read time\n")
+						response = make([]byte, 13)
+						now := time.Now().Local()
+						response[0] = byte(now.Year() - 2000)
+						response[1] = byte(now.Month())
+						response[2] = byte(now.Day())
+						response[3] = byte(now.Hour())
+						response[4] = byte(now.Minute())
+					case 0x50: // set year
+						fmt.Printf("Set year\n")
+						fmt.Printf(" --> %v\n", int(buff[3])+2000)
+					case 0x51: // set month
+						fmt.Printf("Set month\n")
+						fmt.Printf(" --> %v\n", int(buff[3]))
+					case 0x52: // set day
+						fmt.Printf("Set day\n")
+						fmt.Printf(" --> %v\n", int(buff[3]))
+					case 0x53: // set hour
+						fmt.Printf("Set hour\n")
+						fmt.Printf(" --> %v\n", int(buff[3]))
+					case 0x54: // set minute
+						fmt.Printf("Set minute\n")
+						fmt.Printf(" --> %v\n", int(buff[3]))
+					case 0x08: // read serial
+						fmt.Printf("Read serial number\n")
+						response = []byte("1533A5012345\x00")
+					case 0x09: // read protocol + firmware
+						fmt.Printf("Read protocol + firmware\n")
+						response = []byte("111-23\x00\x00\x00\x00\x00\x00\x00")
+					default:
+						fmt.Printf("Unknown command: %v\n", buff)
+					}
+
+					if response != nil {
+						if len(response) != 13 {
+							log.Fatalf("response array has length %v, expected 13\n", len(response))
+						}
+
+						chksum = 0
+						for i := 0; i < 12; i++ {
+							chksum += int(response[i])
+						}
+						chksum = chksum % 256
+						response[12] = byte(chksum)
+
+						n, err := port.Write(response)
+						if err != nil {
+							log.Fatal(err)
+						}
+						fmt.Printf("Sent %v bytes: %v\n", n, response)
+					}
+				}
+
+				for ; readbuffIndex < n; readbuffIndex++ {
+					buff[buffIndex] = readbuff[readbuffIndex]
+					buffIndex++
 				}
 			}
 		}
