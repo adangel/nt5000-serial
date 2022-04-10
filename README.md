@@ -12,6 +12,7 @@
 * https://wiki.fhem.de/wiki/NT5000
 * https://medium.com/aeturnuminc/configure-prometheus-and-grafana-in-dockers-ff2a2b51aa1d
 * https://prometheus.io/docs/guides/go-application/
+* https://biancatamayo.me/blog/docker-add-host-ip/
 
 # Features
 * commands: getdata, settime
@@ -71,3 +72,30 @@ Response: 12 bytes + checksum
 Send: "\x00\x01\x09\x01\x0B"
 
 Response: 6 bytes + 6 null bytes + checksum
+
+# Prometheus and Grafana
+
+```
+HOST_IP=`ip -4 addr show scope global dev docker0|grep inet |awk '{print $2}'|cut -d / -f 1`
+sudo ufw allow from 172.17.0.0/16 to 172.17.0.1 port 8080
+sudo ufw allow from 172.17.0.0/16 to 172.17.0.1 port 9090
+
+docker run --add-host outside:$HOST_IP -d --name prometheus -p 9090:9090 -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus --config.file=/etc/prometheus/prometheus.yml
+
+docker run -d --name grafana -p 3000:3000 grafana/grafana
+
+```
+
+Configure grafana: http://localhost:3000
+* default username "admin" and password "admin"
+* add data source, prometheus
+* url: http://172.17.0.1:9090 (depending on HOST_IP)
+* import dashboard `NT5000-grafana-dashboard.json`
+
+Shutdown:
+
+```
+docker stop grafana && docker rm grafana
+docker stop prometheus && docker rm prometheus
+```
+
