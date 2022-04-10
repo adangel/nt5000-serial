@@ -21,15 +21,16 @@
 Send: "\x00\x01\x02\x01\x04". Last byte is checksum, 5 bytes in total
 Receive: 13 bytes in buffer
 
-1. UDC (voltage DC): buffer[0]*2.8+100
-2. IDC (current DC): buffer[1]*0.08
-3. UAC (voltage AC): buffer[2]+100.0
-4. IAC (current AC): buffer[3]*0.120
-5. Temperature: buffer[4]-40.0
-6. PDC (Power DC): ($udc*$idc)/1000
-7. PAC (Power AC): ($uac*$iac)/1000
-8. Energy Today: (buffer[6] * 256 + buffer[7])/1000
-9. Energy Total: buffer[8] * 256 + buffer[9]; 
+1. UDC (voltage DC): buffer[0]*2.8+100, unit: V
+2. IDC (current DC): buffer[1]*0.08, unit: A
+3. UAC (voltage AC): buffer[2]+100.0, unit: V
+4. IAC (current AC): buffer[3]*0.120, unit: A
+5. Temperature: buffer[4]-40.0, unit: °C
+6. PDC (Power DC): ($udc*$idc)/1000, unit: kW
+7. PAC (Power AC): ($uac*$iac)/1000, unit: kW
+8. Energy Today: (buffer[6] * 256 + buffer[7])/1000, unit: kWH
+9. Energy Total: buffer[8] * 256 + buffer[9], unit: kWH
+10. Heat flux: buffer[5]*6.0, unit: W/m^2
 
 ## Read time
 
