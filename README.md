@@ -10,6 +10,8 @@
 # Docu
 * https://svn.fhem.de/trac/browser/trunk/fhem/contrib/70_NT5000.pm
 * https://wiki.fhem.de/wiki/NT5000
+* https://medium.com/aeturnuminc/configure-prometheus-and-grafana-in-dockers-ff2a2b51aa1d
+* https://prometheus.io/docs/guides/go-application/
 
 # Features
 * commands: getdata, settime
@@ -28,8 +30,8 @@ Receive: 13 bytes in buffer
 5. Temperature: buffer[4]-40.0, unit: °C
 6. PDC (Power DC): ($udc*$idc)/1000, unit: kW
 7. PAC (Power AC): ($uac*$iac)/1000, unit: kW
-8. Energy Today: (buffer[6] * 256 + buffer[7])/1000, unit: kWH
-9. Energy Total: buffer[8] * 256 + buffer[9], unit: kWH
+8. Energy Today: (buffer[6] * 256 + buffer[7])/1000, unit: kWh
+9. Energy Total: buffer[8] * 256 + buffer[9], unit: kWh
 10. Heat flux: buffer[5]*6.0, unit: W/m^2
 
 ## Read time
