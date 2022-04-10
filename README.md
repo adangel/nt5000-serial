@@ -57,3 +57,14 @@ Multiple commands:
 
 No response.
 
+## Read Serial Number
+
+Send: "\x00\x01\x08\x01\x0A"
+
+Response: 12 bytes + checksum
+
+## Read Protocol and Firmware Version
+
+Send: "\x00\x01\x09\x01\x0B"
+
+Response: 6 bytes + 6 null bytes + checksum

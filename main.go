@@ -208,13 +208,24 @@ var cmdDisplay = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Displaying...")
 
+		if pollInterval < 1 || pollInterval > 100 {
+			fmt.Printf("Invalid poll interval %v specified, using default\n", pollInterval)
+			pollInterval = 5
+		}
+
 		area := cursor.NewArea()
 		area.Clear()
+
+		serialnumber := readSerialNumber()
+		protocol := readProtocol()
 
 		for {
 			data := getDataPoint()
 			disp := fmt.Sprintf(`
 Date: %v
+
+Serial Number: %v
+     Protocol: %v
 
  udc: % 8.1f V
  idc: % 8.1f A
@@ -227,7 +238,8 @@ wtot: % 8.1f kWh
 temp: % 8.1f °C
 
 Polling every %v seconds. Abort with Ctlr+C
-`, data.Date, data.DC.Voltage, data.DC.Current, data.DC.Power,
+`, data.Date, serialnumber, protocol,
+				data.DC.Voltage, data.DC.Current, data.DC.Power,
 				data.AC.Voltage, data.AC.Current, data.AC.Power,
 				data.EnergyDay, data.EnergyTotal, data.Temperature,
 				pollInterval)
@@ -375,6 +387,128 @@ func getDataPoint() DataPoint {
 	}
 
 	return d
+}
+
+func readSerialNumber() string {
+	log.Printf("querying serial port %s", serialport)
+
+	buff := make([]byte, 13)
+
+	if emulate {
+		buff = []byte("1533A5012345\x71")
+	} else {
+		mode := &serial.Mode{
+			BaudRate: 9600,
+			Parity:   serial.NoParity,
+			DataBits: 8,
+			StopBits: serial.OneStopBit,
+		}
+
+		port, err := serial.Open("/dev/ttyUSB0", mode)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		n, err := port.Write([]byte("\x00\x01\x08\x01\x0A"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Sent %v bytes\n", n)
+
+		port.SetReadTimeout(time.Second * 1)
+
+		for {
+			n, err := port.Read(buff)
+			if err != nil {
+				log.Fatal(err)
+				break
+			}
+			if n == 0 {
+				fmt.Println("\nEOF")
+				break
+			}
+			if n == 13 {
+				break
+			}
+		}
+
+		err = port.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	chksum := 0
+	for i := 0; i < 12; i++ {
+		chksum += int(buff[i])
+	}
+	chksum = chksum % 256
+	if buff[12] != byte(chksum) {
+		fmt.Printf("invalid checksum. expected 0x%02x but was 0x%02x\n", chksum, buff[12])
+	}
+
+	return string(buff[:12])
+}
+
+func readProtocol() string {
+	log.Printf("querying serial port %s", serialport)
+
+	buff := make([]byte, 13)
+
+	if emulate {
+		buff = []byte("111-23\x00\x00\x00\x00\x00\x00\x25")
+	} else {
+		mode := &serial.Mode{
+			BaudRate: 9600,
+			Parity:   serial.NoParity,
+			DataBits: 8,
+			StopBits: serial.OneStopBit,
+		}
+
+		port, err := serial.Open("/dev/ttyUSB0", mode)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		n, err := port.Write([]byte("\x00\x01\x09\x01\x0B"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Sent %v bytes\n", n)
+
+		port.SetReadTimeout(time.Second * 1)
+
+		for {
+			n, err := port.Read(buff)
+			if err != nil {
+				log.Fatal(err)
+				break
+			}
+			if n == 0 {
+				fmt.Println("\nEOF")
+				break
+			}
+			if n == 13 {
+				break
+			}
+		}
+
+		err = port.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	chksum := 0
+	for i := 0; i < 12; i++ {
+		chksum += int(buff[i])
+	}
+	chksum = chksum % 256
+	if buff[12] != byte(chksum) {
+		fmt.Printf("invalid checksum. expected 0x%02x but was 0x%02x\n", chksum, buff[12])
+	}
+
+	return string(buff[:6])
 }
 
 func main() {
