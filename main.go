@@ -244,12 +244,14 @@ Serial Number: %v
   wd: % 8.1f kWh
 wtot: % 8.1f kWh
 temp: % 8.1f °C
+flux: % 8.1f W/m^2
 
 Polling every %v seconds. Abort with Ctlr+C
 `, data.Date, serialnumber, protocol,
 				data.DC.Voltage, data.DC.Current, data.DC.Power,
 				data.AC.Voltage, data.AC.Current, data.AC.Power,
 				data.EnergyDay, data.EnergyTotal, data.Temperature,
+				data.HeatFlux,
 				pollInterval)
 
 			area.Update(disp)
@@ -273,6 +275,7 @@ type DataPoint struct {
 	DC          measurement
 	AC          measurement
 	Temperature float32
+	HeatFlux    float32
 	EnergyDay   float32
 	EnergyTotal float32
 }
@@ -313,10 +316,12 @@ func handlerDisplay(w http.ResponseWriter, r *http.Request) {
 <tr><td>wd</td><td>%f kWh</td></tr>
 <tr><td>wtot</td><td>%f kWh</td></tr>
 <tr><td>temp</td><td>%f °C</td></tr>
+<tr><td>flux</td><td>%f W/m^2</td></tr>
 </table>
 </body>
 </html>
-	`, d.Date, d.DC.Voltage, d.DC.Current, d.DC.Power, d.AC.Voltage, d.AC.Current, d.AC.Power, d.EnergyDay, d.EnergyTotal, d.Temperature)
+	`, d.Date, d.DC.Voltage, d.DC.Current, d.DC.Power, d.AC.Voltage, d.AC.Current, d.AC.Power, d.EnergyDay, d.EnergyTotal, d.Temperature,
+		d.HeatFlux)
 }
 
 func getDataPoint() DataPoint {
@@ -355,6 +360,10 @@ func getDataPoint() DataPoint {
 				log.Fatal(err)
 				break
 			}
+			if n == 0 {
+				fmt.Printf("Received nothing\n")
+				break
+			}
 			fmt.Printf("Received %v bytes: %v\n", n, readBuff[:n])
 			for i := 0; i < n; i++ {
 				buff[buffIndex] = readBuff[i]
@@ -378,6 +387,7 @@ func getDataPoint() DataPoint {
 	var temp float32 = float32(buff[4]) - 40.0
 	var wd float32 = (float32(buff[6])*256 + float32(buff[7])) / 1000.0
 	var wtot float32 = float32(buff[8])*256 + float32(buff[9])
+	var flux float32 = float32(buff[5]) * 6.0
 
 	d := DataPoint{
 		Date: time.Now().Local().Format(time.ANSIC),
@@ -393,6 +403,7 @@ func getDataPoint() DataPoint {
 		},
 
 		Temperature: temp,
+		HeatFlux:    flux,
 		EnergyDay:   wd,
 		EnergyTotal: wtot,
 	}
@@ -614,7 +625,7 @@ var cmdEmulator = &cobra.Command{
 						temp := 60*rand.Float32() - 20 // between -20°C/+40°C
 						response[4] = byte(temp + 40)
 
-						response[5] = 0
+						response[5] = byte(100 * rand.Float32())
 
 						now := time.Now().UnixMilli()
 						if lastReading > 0 {
