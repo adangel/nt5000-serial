@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/atomicgo/cursor"
 	"github.com/spf13/cobra"
 	"go.bug.st/serial"
 )
@@ -200,6 +201,44 @@ var cmdDatetime = &cobra.Command{
 	},
 }
 
+var pollInterval uint8
+var cmdDisplay = &cobra.Command{
+	Use:   "display",
+	Short: "Display current reading on the command line",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("Displaying...")
+
+		area := cursor.NewArea()
+		area.Clear()
+
+		for {
+			data := getDataPoint()
+			disp := fmt.Sprintf(`
+Date: %v
+
+ udc: % 8.1f V
+ idc: % 8.1f A
+ pdc: % 8.1f kW
+ uac: % 8.1f V
+ iac: % 8.1f A
+ pac: % 8.1f kW
+  wd: % 8.1f kWh
+wtot: % 8.1f kWh
+temp: % 8.1f °C
+
+Polling every %v seconds. Abort with Ctlr+C
+`, data.Date, data.DC.Voltage, data.DC.Current, data.DC.Power,
+				data.AC.Voltage, data.AC.Current, data.AC.Power,
+				data.EnergyDay, data.EnergyTotal, data.Temperature,
+				pollInterval)
+
+			area.Update(disp)
+			time.Sleep(time.Second * time.Duration(pollInterval))
+		}
+
+	},
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Path[1:]
 	fmt.Fprintf(w, "<h1>%s</h1>", title)
@@ -248,9 +287,9 @@ func handlerDisplay(w http.ResponseWriter, r *http.Request) {
 <tr><td>udc</td><td>%f V</td></tr>
 <tr><td>idc</td><td>%f A</td></tr>
 <tr><td>pdc</td><td>%f kW</td></tr>
-<tr><td>udc</td><td>%f V</td></tr>
-<tr><td>idc</td><td>%f A</td></tr>
-<tr><td>pdc</td><td>%f kW</td></tr>
+<tr><td>uac</td><td>%f V</td></tr>
+<tr><td>iac</td><td>%f A</td></tr>
+<tr><td>pac</td><td>%f kW</td></tr>
 <tr><td>wd</td><td>%f kWh</td></tr>
 <tr><td>wtot</td><td>%f kWh</td></tr>
 <tr><td>temp</td><td>%f °C</td></tr>
@@ -344,10 +383,12 @@ func main() {
 
 	cmdWeb.Flags().StringVarP(&port, "port", "p", "8080", "port to listen on")
 	cmdDatetime.Flags().BoolVarP(&settime, "set", "s", false, "Sets the date and time")
+	cmdDisplay.Flags().Uint8VarP(&pollInterval, "poll", "n", 5, "Poll every n seconds")
 
 	rootCmd.AddCommand(cmdWeb)
 	rootCmd.AddCommand(cmdSerial)
 	rootCmd.AddCommand(cmdDatetime)
+	rootCmd.AddCommand(cmdDisplay)
 	err := rootCmd.Execute()
 	if err != nil {
 		fmt.Println(err)

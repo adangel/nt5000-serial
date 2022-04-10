@@ -3,6 +3,7 @@ module github.com/adangel/nt5000-serial
 go 1.18
 
 require (
+	github.com/atomicgo/cursor v0.0.1 // indirect
 	github.com/creack/goselect v0.1.2 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/spf13/cobra v1.4.0 // indirect
