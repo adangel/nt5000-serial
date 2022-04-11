@@ -10,6 +10,7 @@ import (
 	"github.com/atomicgo/cursor"
 	"github.com/spf13/cobra"
 
+	"github.com/adangel/nt5000-serial/protocol"
 	serial "github.com/adangel/nt5000-serial/serial"
 )
 
@@ -23,7 +24,7 @@ var rootCmd = &cobra.Command{
 	Version: "1.0.0",
 }
 
-var currentData DataPoint
+var currentData protocol.DataPoint
 
 var cmdWeb = &cobra.Command{
 	Use:   "web",
@@ -57,31 +58,31 @@ var cmdDatetime = &cobra.Command{
 			// year
 			buff[2] = 0x50
 			buff[3] = byte(now.Year() - 2000)
-			buff[4] = byte((1 + 0x50 + int(buff[3])) % 256)
+			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			// month
 			buff[2] = 0x51
 			buff[3] = byte(now.Month())
-			buff[4] = byte((1 + 0x51 + int(buff[3])) % 256)
+			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			// day
 			buff[2] = 0x52
 			buff[3] = byte(now.Day())
-			buff[4] = byte((1 + 0x52 + int(buff[3])) % 256)
+			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			// hour
 			buff[2] = 0x53
 			buff[3] = byte(now.Hour())
-			buff[4] = byte((1 + 0x53 + int(buff[3])) % 256)
+			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			// minute
 			buff[2] = 0x54
 			buff[3] = byte(now.Minute())
-			buff[4] = byte((1 + 0x54 + int(buff[3])) % 256)
+			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			serial.Disconnect()
@@ -97,11 +98,7 @@ var cmdDatetime = &cobra.Command{
 				buff[2] = byte(now.Day())
 				buff[3] = byte(now.Hour())
 				buff[4] = byte(now.Minute())
-				sum := int(0)
-				for i := 0; i < 12; i++ {
-					sum += int(buff[i])
-				}
-				buff[12] = byte(sum % 256)
+				protocol.CalculateChecksum(buff)
 			} else {
 				serial.Connect(serialport)
 				serial.Send([]byte("\x00\x01\x06\x01\x08"))
@@ -167,24 +164,8 @@ Polling every %v seconds. Abort with Ctlr+C
 	},
 }
 
-type DataPoint struct {
-	Date        string
-	DC          measurement
-	AC          measurement
-	Temperature float32
-	HeatFlux    float32
-	EnergyDay   float32
-	EnergyTotal float32
-}
-
-type measurement struct {
-	Voltage float32
-	Current float32
-	Power   float32
-}
-
-func getDataPoint() DataPoint {
-	log.Printf("querying serial port %s", serialport)
+func getDataPoint() protocol.DataPoint {
+	log.Printf("Querying serial port %s", serialport)
 
 	buff := make([]byte, 13)
 
@@ -206,14 +187,14 @@ func getDataPoint() DataPoint {
 	var wtot float32 = float32(buff[8])*256 + float32(buff[9])
 	var flux float32 = float32(buff[5]) * 6.0
 
-	d := DataPoint{
+	d := protocol.DataPoint{
 		Date: time.Now().Local().Format(time.ANSIC),
-		DC: measurement{
+		DC: protocol.Measurement{
 			Voltage: udc,
 			Current: idc,
 			Power:   (udc * idc) / 1000,
 		},
-		AC: measurement{
+		AC: protocol.Measurement{
 			Voltage: uac,
 			Current: iac,
 			Power:   (uac * iac) / 1000,
@@ -302,13 +283,9 @@ var cmdEmulator = &cobra.Command{
 				// ignore incomplete or no data
 				continue
 			}
-			chksum := 0
-			for i := 0; i < 4; i++ {
-				chksum += int(buff[i])
-			}
-			chksum = chksum % 256
-			if byte(chksum) != buff[4] {
-				fmt.Printf("invalid checksum: expected 0x%02x, got 0x%02x\n", chksum, buff[4])
+			err = protocol.VerifyChecksum(buff)
+			if err != nil {
+				log.Print(err)
 			}
 
 			var response []byte = nil
@@ -389,13 +366,7 @@ var cmdEmulator = &cobra.Command{
 					log.Fatalf("response array has length %v, expected 13\n", len(response))
 				}
 
-				chksum = 0
-				for i := 0; i < 12; i++ {
-					chksum += int(response[i])
-				}
-				chksum = chksum % 256
-				response[12] = byte(chksum)
-
+				protocol.CalculateChecksum(response)
 				serial.Send(response)
 			}
 
