@@ -177,31 +177,20 @@ One simple way to visualize the data is to use grafana. Here's a how to using
 nt5000-serial is running on the host, as it needs access to the serial port. It runs a 
 web server on port 8080.
 
-The prometheus container needs to access the web server of nt5000-serial. Therefore
+The [prometheus](https://hub.docker.com/r/prom/prometheus) container needs to access
+the web server of nt5000-serial. Therefore
 maybe the firewall needs to allow access from the container to the host network.
 Prometheus is running on port 9090.
 
-The grafana container needs to access the prometheus container. This is done via
-the host. Grafana is running on port 3000.
+The [grafana](https://hub.docker.com/r/grafana/grafana) container needs to access
+the prometheus container. This is done via the host. Grafana is running on port 3000.
 
-```
-# determine the host ip address - usually 172.17.0.1
-HOST_IP=`ip -4 addr show scope global dev docker0|grep inet |awk '{print $2}'|cut -d / -f 1`
-# allow access from containers to specific ports on the host
-sudo ufw allow from 172.17.0.0/16 to $HOST_IP port 8080
-sudo ufw allow from 172.17.0.0/16 to $HOST_IP port 9090
-
-# start prometheus
-docker run --add-host outside:$HOST_IP -d --name prometheus -p 9090:9090 -v $(pwd)/prometheus.yml:/etc/prometheus/prometheus.yml prom/prometheus --config.file=/etc/prometheus/prometheus.yml
-
-# start grafana
-docker run -d --name grafana -p 3000:3000 grafana/grafana
-```
+To simplify the start process, see `./start-prometheus-grafana.sh`.
 
 Configure grafana: http://localhost:3000
 * Default username "admin" and password "admin"
 * Add data source, prometheus
-* URL: http://172.17.0.1:9090 (depending on HOST_IP)
+* Prometheus URL: http://outside:9090
 * Import dashboard `NT5000-grafana-dashboard.json`
 
 The dashboard looks like this:
