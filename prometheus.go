@@ -1,11 +1,7 @@
 package main
 
 import (
-	"log"
-	"time"
-
 	"github.com/adangel/nt5000-serial/protocol"
-	"github.com/adangel/nt5000-serial/serial"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -51,29 +47,15 @@ var gaugeEnergyTotal = promauto.NewGauge(prometheus.GaugeOpts{
 	Help: "Energy harvested total in kWh",
 })
 
-var currentData protocol.DataPoint
-
-func recordData() {
-	go func() {
-		if !emulate {
-			log.Printf("Querying serial port %s", serialport)
-			serial.Connect(serialport)
-		}
-
-		for {
-			currentData = getDataPoint()
-			gaugeDCVoltage.Set(float64(currentData.DC.Voltage))
-			gaugeDCCurrent.Set(float64(currentData.DC.Current))
-			gaugeDCPower.Set(float64(currentData.DC.Power))
-			gaugeACVoltage.Set(float64(currentData.AC.Voltage))
-			gaugeACCurrent.Set(float64(currentData.AC.Current))
-			gaugeACPower.Set(float64(currentData.AC.Power))
-			gaugeTemperature.Set(float64(currentData.Temperature))
-			gaugeHeatFlux.Set(float64(currentData.HeatFlux))
-			gaugeEnergyDay.Set(float64(currentData.EnergyDay))
-			gaugeEnergyTotal.Set(float64(currentData.EnergyTotal))
-
-			time.Sleep(time.Second * time.Duration(pollInterval))
-		}
-	}()
+func recordPrometheusData(currentData protocol.DataPoint) {
+	gaugeDCVoltage.Set(float64(currentData.DC.Voltage))
+	gaugeDCCurrent.Set(float64(currentData.DC.Current))
+	gaugeDCPower.Set(float64(currentData.DC.Power))
+	gaugeACVoltage.Set(float64(currentData.AC.Voltage))
+	gaugeACCurrent.Set(float64(currentData.AC.Current))
+	gaugeACPower.Set(float64(currentData.AC.Power))
+	gaugeTemperature.Set(float64(currentData.Temperature))
+	gaugeHeatFlux.Set(float64(currentData.HeatFlux))
+	gaugeEnergyDay.Set(float64(currentData.EnergyDay))
+	gaugeEnergyTotal.Set(float64(currentData.EnergyTotal))
 }
