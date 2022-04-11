@@ -5,6 +5,8 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/atomicgo/cursor"
@@ -23,8 +25,6 @@ var rootCmd = &cobra.Command{
 	Short:   "communicate with sunways nt5000 converter via rs232",
 	Version: "1.0.0",
 }
-
-var currentData protocol.DataPoint
 
 var cmdWeb = &cobra.Command{
 	Use:   "web",
@@ -124,8 +124,15 @@ var cmdDisplay = &cobra.Command{
 			pollInterval = 5
 		}
 
+		setupCloseHandler()
+
 		area := cursor.NewArea()
 		area.Clear()
+
+		if !emulate {
+			log.Printf("Querying serial port %s", serialport)
+			serial.Connect(serialport)
+		}
 
 		serialnumber := readSerialNumber()
 		protocol := readProtocol()
@@ -165,17 +172,13 @@ Polling every %v seconds. Abort with Ctlr+C
 }
 
 func getDataPoint() protocol.DataPoint {
-	log.Printf("Querying serial port %s", serialport)
-
 	buff := make([]byte, 13)
 
 	if emulate {
 		buff = []byte("\x8e\x11\x82\x06\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c")
 	} else {
-		serial.Connect(serialport)
 		serial.Send([]byte("\x00\x01\x02\x01\x04"))
 		serial.Receive(buff)
-		serial.Disconnect()
 	}
 
 	var udc float32 = float32(buff[0])*2.8 + 100.0
@@ -210,17 +213,13 @@ func getDataPoint() protocol.DataPoint {
 }
 
 func readSerialNumber() string {
-	log.Printf("Querying serial port %s", serialport)
-
 	buff := make([]byte, 13)
 
 	if emulate {
 		buff = []byte("1533A5012345\x71")
 	} else {
-		serial.Connect(serialport)
 		serial.Send([]byte("\x00\x01\x08\x01\x0A"))
 		serial.Receive(buff)
-		serial.Disconnect()
 	}
 
 	chksum := 0
@@ -236,17 +235,13 @@ func readSerialNumber() string {
 }
 
 func readProtocol() string {
-	log.Printf("Querying serial port %s", serialport)
-
 	buff := make([]byte, 13)
 
 	if emulate {
 		buff = []byte("111-23\x00\x00\x00\x00\x00\x00\x25")
 	} else {
-		serial.Connect(serialport)
 		serial.Send([]byte("\x00\x01\x09\x01\x0B"))
 		serial.Receive(buff)
-		serial.Disconnect()
 	}
 
 	chksum := 0
@@ -268,6 +263,8 @@ var cmdEmulator = &cobra.Command{
 		fmt.Printf("Emulating on port %s\n", serialport)
 
 		serial.Connect(serialport)
+
+		setupCloseHandler()
 
 		buff := make([]byte, 5)
 
@@ -372,6 +369,18 @@ var cmdEmulator = &cobra.Command{
 
 		}
 	},
+}
+
+// see https://golangcode.com/handle-ctrl-c-exit-in-terminal/
+func setupCloseHandler() {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		log.Printf("Ctlr+C pressed, exiting...")
+		serial.Disconnect()
+		os.Exit(0)
+	}()
 }
 
 func main() {

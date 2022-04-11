@@ -1,8 +1,11 @@
 package main
 
 import (
+	"log"
 	"time"
 
+	"github.com/adangel/nt5000-serial/protocol"
+	"github.com/adangel/nt5000-serial/serial"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -48,10 +51,16 @@ var gaugeEnergyTotal = promauto.NewGauge(prometheus.GaugeOpts{
 	Help: "Energy harvested total in kWh",
 })
 
+var currentData protocol.DataPoint
+
 func recordData() {
 	go func() {
-		for {
+		if !emulate {
+			log.Printf("Querying serial port %s", serialport)
+			serial.Connect(serialport)
+		}
 
+		for {
 			currentData = getDataPoint()
 			gaugeDCVoltage.Set(float64(currentData.DC.Voltage))
 			gaugeDCCurrent.Set(float64(currentData.DC.Current))

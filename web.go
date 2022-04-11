@@ -33,6 +33,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		time.Sleep(time.Second * 2)
 		browser.OpenURL(url)
 	}()
+	setupCloseHandler()
 
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
