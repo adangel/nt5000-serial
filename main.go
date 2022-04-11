@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,8 +11,9 @@ import (
 	"github.com/atomicgo/cursor"
 	"github.com/spf13/cobra"
 
+	"github.com/adangel/nt5000-serial/emulator"
 	"github.com/adangel/nt5000-serial/protocol"
-	serial "github.com/adangel/nt5000-serial/serial"
+	"github.com/adangel/nt5000-serial/serial"
 )
 
 var port string
@@ -52,8 +52,8 @@ var cmdDatetime = &cobra.Command{
 			serial.Connect(serialport)
 
 			buff := make([]byte, 5)
-			buff[0] = 0
-			buff[1] = 1
+			buff[0] = 0x00
+			buff[1] = 0x01
 
 			// year
 			buff[2] = 0x50
@@ -91,13 +91,7 @@ var cmdDatetime = &cobra.Command{
 
 			log.Println("Reading current date...")
 			if emulate {
-				now := time.Now().Local()
-				buff[0] = byte(now.Year() - 2000)
-				buff[1] = byte(now.Month())
-				buff[2] = byte(now.Day())
-				buff[3] = byte(now.Hour())
-				buff[4] = byte(now.Minute())
-				protocol.CalculateChecksum(buff)
+				buff = emulator.CurrentTimeBytes()
 			} else {
 				serial.Connect(serialport)
 				serial.Send([]byte("\x00\x01\x06\x01\x08"))
@@ -111,7 +105,7 @@ var cmdDatetime = &cobra.Command{
 			}
 
 			t := time.Date(int(buff[0])+2000, time.Month(buff[1]), int(buff[2]), int(buff[3]), int(buff[4]), 0, 0, time.Local)
-			fmt.Printf("Current time: %s\n", t.Local().Format(time.ANSIC))
+			log.Printf("Current time: %s\n", t.Local().Format(time.ANSIC))
 		}
 	},
 }
@@ -121,10 +115,10 @@ var cmdDisplay = &cobra.Command{
 	Use:   "display",
 	Short: "Display current reading on the command line",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Displaying...")
+		log.Println("Displaying...")
 
 		if pollInterval < 1 || pollInterval > 100 {
-			fmt.Printf("Invalid poll interval %v specified, using default\n", pollInterval)
+			log.Printf("Invalid poll interval %v specified, using default\n", pollInterval)
 			pollInterval = 5
 		}
 
@@ -179,7 +173,7 @@ func getDataPoint() protocol.DataPoint {
 	buff := make([]byte, 13)
 
 	if emulate {
-		buff = []byte("\x8e\x11\x82\x06\x46\x05\x06\x07\x08\x09\x0a\x0b\xa5")
+		buff = protocol.ConvertToByte(emulator.ProduceDataPoint())
 	} else {
 		serial.Send([]byte("\x00\x01\x02\x01\x04"))
 		serial.Receive(buff)
@@ -237,19 +231,13 @@ var cmdEmulator = &cobra.Command{
 	Use:   "emulator",
 	Short: "Emulate a NT5000 at the given serial port",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Emulating on port %s\n", serialport)
+		log.Printf("Emulating on port %s\n", serialport)
 
 		serial.Connect(serialport)
 
 		setupCloseHandler()
 
 		buff := make([]byte, 5)
-
-		rand.Seed(time.Now().UnixNano())
-
-		d := protocol.DataPoint{}
-		d.EnergyTotal = 1000.0 * rand.Float32()
-		var lastReading int64 = 0
 
 		for {
 			err := serial.Receive(buff)
@@ -266,57 +254,30 @@ var cmdEmulator = &cobra.Command{
 
 			switch buff[2] {
 			case 0x02: // read data
-				fmt.Printf("Read data\n")
-
-				d.DC.Power = 4500.0 * rand.Float32()
-				d.DC.Voltage = float32(500.0)
-				d.DC.Current = d.DC.Power / d.DC.Voltage
-				d.AC.Power = d.DC.Power
-				d.AC.Voltage = float32(230.0)
-				d.AC.Current = d.AC.Power / d.AC.Voltage
-				d.Temperature = 60*rand.Float32() - 20 // between -20°C/+40°C
-				d.HeatFlux = 100 * rand.Float32()
-
-				now := time.Now().UnixMilli()
-				if lastReading > 0 {
-					millis := now - lastReading
-					energy := d.DC.Power * float32(millis) / 1000.0 / 3600.0 / 1000.0
-					d.EnergyDay += energy
-					d.EnergyTotal += energy
-					log.Printf("Energy %v Wh in last %v ms\n", energy, millis)
-					log.Printf("Updated energyDay=%v\n", d.EnergyDay)
-				}
-				lastReading = now
-
-				response = protocol.ConvertToByte(d)
+				log.Printf("Read data\n")
+				response = protocol.ConvertToByte(emulator.ProduceDataPoint())
 
 			case 0x06: // read time
-				fmt.Printf("Read time\n")
-				response = make([]byte, 13)
-				now := time.Now().Local()
-				response[0] = byte(now.Year() - 2000)
-				response[1] = byte(now.Month())
-				response[2] = byte(now.Day())
-				response[3] = byte(now.Hour())
-				response[4] = byte(now.Minute())
+				log.Printf("Read time\n")
+				response = emulator.CurrentTimeBytes()
 			case 0x50: // set year
-				fmt.Printf("Set year --> %v\n", int(buff[3])+2000)
+				log.Printf("Set year --> %v\n", int(buff[3])+2000)
 			case 0x51: // set month
-				fmt.Printf("Set month --> %v\n", int(buff[3]))
+				log.Printf("Set month --> %v\n", int(buff[3]))
 			case 0x52: // set day
-				fmt.Printf("Set day --> %v\n", int(buff[3]))
+				log.Printf("Set day --> %v\n", int(buff[3]))
 			case 0x53: // set hour
-				fmt.Printf("Set hour --> %v\n", int(buff[3]))
+				log.Printf("Set hour --> %v\n", int(buff[3]))
 			case 0x54: // set minute
-				fmt.Printf("Set minute --> %v\n", int(buff[3]))
+				log.Printf("Set minute --> %v\n", int(buff[3]))
 			case 0x08: // read serial
-				fmt.Printf("Read serial number\n")
+				log.Printf("Read serial number\n")
 				response = []byte("1533A5012345\x00")
 			case 0x09: // read protocol + firmware
-				fmt.Printf("Read protocol + firmware\n")
+				log.Printf("Read protocol + firmware\n")
 				response = []byte("111-23\x00\x00\x00\x00\x00\x00\x00")
 			default:
-				fmt.Printf("Unknown command: %v\n", buff)
+				log.Printf("Unknown command: %v\n", buff)
 			}
 
 			if response != nil {
