@@ -85,6 +85,8 @@ Instead of "display" you can also run the web server with "web".
 
 In order to cross compile for Windows, run `GOOS=windows GOARCH=amd64 go build`
 
+And for MacOSX, run `GOOS=darwin GOARCH=amd64 go build -o nt5000-serial-macos`
+
 ## Docu
 
 * https://svn.fhem.de/trac/browser/trunk/fhem/contrib/70_NT5000.pm
