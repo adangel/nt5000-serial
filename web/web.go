@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"encoding/json"
@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/adangel/nt5000-serial/prometheus"
 	"github.com/adangel/nt5000-serial/protocol"
 	"github.com/adangel/nt5000-serial/serial"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/spf13/cobra"
 
 	"github.com/pkg/browser"
 )
@@ -21,22 +21,17 @@ var basicInfo struct {
 	protocol     string
 }
 
-func startWebServer(cmd *cobra.Command, args []string) {
+func StartWebServer(port string, pollInterval uint8, serialPort string, emulate bool) {
 	url := fmt.Sprintf("http://localhost:%s/", port)
 	log.Printf("Starting... %v\n", url)
 
-	if pollInterval < 1 || pollInterval > 100 {
-		fmt.Printf("Invalid poll interval %v specified, using default\n", pollInterval)
-		pollInterval = 5
-	}
-
 	if !emulate {
-		log.Printf("Querying serial port %s", serialport)
-		serial.Connect(serialport)
+		log.Printf("Querying serial port %s", serialPort)
+		serial.Connect(serialPort)
 	}
-	basicInfo.serialnumber = readSerialNumber()
-	basicInfo.protocol = readProtocol()
-	updateDataInBackground()
+	basicInfo.serialnumber = serial.ReadSerialNumber(emulate)
+	basicInfo.protocol = serial.ReadProtocol(emulate)
+	updateDataInBackground(pollInterval, emulate)
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/display", handlerDisplay)
@@ -47,16 +42,16 @@ func startWebServer(cmd *cobra.Command, args []string) {
 		time.Sleep(time.Second * 2)
 		browser.OpenURL(url)
 	}()
-	setupCloseHandler()
+	serial.SetupCloseHandler()
 
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-func updateDataInBackground() {
+func updateDataInBackground(pollInterval uint8, emulate bool) {
 	go func() {
 		for {
-			currentData = getDataPoint()
-			recordPrometheusData(currentData)
+			currentData = serial.GetDataPoint(emulate)
+			prometheus.RecordPrometheusData(currentData)
 			time.Sleep(time.Second * time.Duration(pollInterval))
 		}
 	}()

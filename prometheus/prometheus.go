@@ -1,4 +1,4 @@
-package main
+package prometheus
 
 import (
 	"github.com/adangel/nt5000-serial/protocol"
@@ -47,7 +47,7 @@ var gaugeEnergyTotal = promauto.NewGauge(prometheus.GaugeOpts{
 	Help: "Energy harvested total in kWh",
 })
 
-func recordPrometheusData(currentData protocol.DataPoint) {
+func RecordPrometheusData(currentData protocol.DataPoint) {
 	gaugeDCVoltage.Set(float64(currentData.DC.Voltage))
 	gaugeDCCurrent.Set(float64(currentData.DC.Current))
 	gaugeDCPower.Set(float64(currentData.DC.Power))

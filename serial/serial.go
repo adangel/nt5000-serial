@@ -3,8 +3,13 @@ package serial
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/adangel/nt5000-serial/emulator"
+	"github.com/adangel/nt5000-serial/protocol"
 	"github.com/spf13/cobra"
 	"go.bug.st/serial"
 	"go.bug.st/serial/enumerator"
@@ -111,4 +116,74 @@ func Receive(data []byte) error {
 		err = fmt.Errorf("Didn't receive all data, only %v of %v bytes received\n", index, len(data))
 	}
 	return err
+}
+
+// see https://golangcode.com/handle-ctrl-c-exit-in-terminal/
+func SetupCloseHandler() {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		log.Printf("Ctlr+C pressed, exiting...")
+		Disconnect()
+		os.Exit(0)
+	}()
+}
+
+func GetDataPoint(emulate bool) protocol.DataPoint {
+	buff := make([]byte, 13)
+
+	if emulate {
+		buff = protocol.ConvertToByte(emulator.ProduceDataPoint())
+	} else {
+		Send([]byte("\x00\x01\x02\x01\x04"))
+		Receive(buff)
+	}
+
+	err := protocol.VerifyChecksum(buff)
+	if err != nil {
+		log.Print(err)
+	}
+
+	d, err := protocol.Convert(buff)
+	if err != nil {
+		log.Printf("Invalid data received: %v\n", err)
+	}
+	return d
+}
+
+func ReadSerialNumber(emulate bool) string {
+	buff := make([]byte, 13)
+
+	if emulate {
+		buff = []byte("1533A5012345\x71")
+	} else {
+		Send([]byte("\x00\x01\x08\x01\x0A"))
+		Receive(buff)
+	}
+
+	err := protocol.VerifyChecksum(buff)
+	if err != nil {
+		log.Print(err)
+	}
+
+	return string(buff[:12])
+}
+
+func ReadProtocol(emulate bool) string {
+	buff := make([]byte, 13)
+
+	if emulate {
+		buff = []byte("111-23\x00\x00\x00\x00\x00\x00\x25")
+	} else {
+		Send([]byte("\x00\x01\x09\x01\x0B"))
+		Receive(buff)
+	}
+
+	err := protocol.VerifyChecksum(buff)
+	if err != nil {
+		log.Print(err)
+	}
+
+	return string(buff[:6])
 }
