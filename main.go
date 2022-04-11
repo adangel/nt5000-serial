@@ -1,20 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
-	"net/http"
 	"os"
 	"time"
 
 	"github.com/atomicgo/cursor"
 	"github.com/spf13/cobra"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	serial "github.com/adangel/nt5000-serial/serial"
 )
@@ -31,88 +25,10 @@ var rootCmd = &cobra.Command{
 
 var currentData DataPoint
 
-func recordData() {
-	go func() {
-		for {
-
-			currentData = getDataPoint()
-			gaugeDCVoltage.Set(float64(currentData.DC.Voltage))
-			gaugeDCCurrent.Set(float64(currentData.DC.Current))
-			gaugeDCPower.Set(float64(currentData.DC.Power))
-			gaugeACVoltage.Set(float64(currentData.AC.Voltage))
-			gaugeACCurrent.Set(float64(currentData.AC.Current))
-			gaugeACPower.Set(float64(currentData.AC.Power))
-			gaugeTemperature.Set(float64(currentData.Temperature))
-			gaugeHeatFlux.Set(float64(currentData.HeatFlux))
-			gaugeEnergyDay.Set(float64(currentData.EnergyDay))
-			gaugeEnergyTotal.Set(float64(currentData.EnergyTotal))
-
-			time.Sleep(time.Second * time.Duration(pollInterval))
-		}
-	}()
-}
-
-var gaugeDCVoltage = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_dc_voltage",
-	Help: "DC Voltage in V",
-})
-var gaugeDCCurrent = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_dc_current",
-	Help: "DC Current in A",
-})
-var gaugeDCPower = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_dc_power",
-	Help: "DC Power in kW",
-})
-var gaugeACVoltage = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_ac_voltage",
-	Help: "AC Voltage in V",
-})
-var gaugeACCurrent = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_ac_current",
-	Help: "AC Current in A",
-})
-var gaugeACPower = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_ac_power",
-	Help: "AC Power in kW",
-})
-var gaugeTemperature = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_temperature",
-	Help: "Temperature in °C",
-})
-var gaugeHeatFlux = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_heat_flux",
-	Help: "Heat Flux in W/m^2",
-})
-var gaugeEnergyDay = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_energy_day",
-	Help: "Energy harvested today in kWh",
-})
-var gaugeEnergyTotal = promauto.NewGauge(prometheus.GaugeOpts{
-	Name: "nt5000_energy_total",
-	Help: "Energy harvested total in kWh",
-})
-
 var cmdWeb = &cobra.Command{
 	Use:   "web",
 	Short: "start web server",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("starting... http://localhost:%s/\n", port)
-		fmt.Printf("args: %v\n", args)
-
-		if pollInterval < 1 || pollInterval > 100 {
-			fmt.Printf("Invalid poll interval %v specified, using default\n", pollInterval)
-			pollInterval = 5
-		}
-
-		recordData()
-
-		http.Handle("/metrics", promhttp.Handler())
-		http.HandleFunc("/display", handlerDisplay)
-		http.HandleFunc("/data", handlerData)
-		http.HandleFunc("/", handler)
-		log.Fatal(http.ListenAndServe(":"+port, nil))
-	},
+	Run:   startWebServer,
 }
 
 var cmdSerial = &cobra.Command{
@@ -251,16 +167,6 @@ Polling every %v seconds. Abort with Ctlr+C
 	},
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	title := r.URL.Path[1:]
-	fmt.Fprintf(w, "<h1>%s</h1>", title)
-	fmt.Fprintf(w, `
-	<p><a href='/data'>data</a></p>
-	<p><a href="/display">display</a></p>
-	<p><a href="/metrics">metrics for prometheus</a></p>
-	`)
-}
-
 type DataPoint struct {
 	Date        string
 	DC          measurement
@@ -275,44 +181,6 @@ type measurement struct {
 	Voltage float32
 	Current float32
 	Power   float32
-}
-
-func handlerData(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	d := currentData
-	bytes, err := json.Marshal(d)
-	if err != nil {
-		fmt.Println("error:", err)
-	}
-	fmt.Fprintf(w, string(bytes))
-}
-
-func handlerDisplay(w http.ResponseWriter, r *http.Request) {
-	d := currentData
-
-	fmt.Fprintf(w, `
-<html>
-<head>
-    <meta http-equiv="refresh" content="5">
-</head>
-<body>
-<table border="1">
-<tr><td>Date</td><td>%s</td></tr>
-<tr><td>udc</td><td>%f V</td></tr>
-<tr><td>idc</td><td>%f A</td></tr>
-<tr><td>pdc</td><td>%f kW</td></tr>
-<tr><td>uac</td><td>%f V</td></tr>
-<tr><td>iac</td><td>%f A</td></tr>
-<tr><td>pac</td><td>%f kW</td></tr>
-<tr><td>wd</td><td>%f kWh</td></tr>
-<tr><td>wtot</td><td>%f kWh</td></tr>
-<tr><td>temp</td><td>%f °C</td></tr>
-<tr><td>flux</td><td>%f W/m^2</td></tr>
-</table>
-</body>
-</html>
-	`, d.Date, d.DC.Voltage, d.DC.Current, d.DC.Power, d.AC.Voltage, d.AC.Current, d.AC.Power, d.EnergyDay, d.EnergyTotal, d.Temperature,
-		d.HeatFlux)
 }
 
 func getDataPoint() DataPoint {
