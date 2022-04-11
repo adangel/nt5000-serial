@@ -16,6 +16,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	serial2 "github.com/adangel/nt5000-serial/serial"
 )
 
 var port string
@@ -117,18 +119,7 @@ var cmdWeb = &cobra.Command{
 var cmdSerial = &cobra.Command{
 	Use:   "serial",
 	Short: "list serial ports",
-	Run: func(cmd *cobra.Command, args []string) {
-		ports, err := serial.GetPortsList()
-		if err != nil {
-			log.Fatal(err)
-		}
-		if len(ports) == 0 {
-			log.Fatal("No serial ports found!")
-		}
-		for _, port := range ports {
-			fmt.Printf("Found port: %v\n", port)
-		}
-	},
+	Run:   serial2.ListSerialPorts,
 }
 
 var settime bool
