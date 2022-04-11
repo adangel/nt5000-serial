@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/atomicgo/cursor v0.0.1
+	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/prometheus/client_golang v1.12.1
 	github.com/spf13/cobra v1.4.0
 	go.bug.st/serial v1.3.5

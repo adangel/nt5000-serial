@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os/exec"
-	"runtime"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
+
+	"github.com/pkg/browser"
 )
 
 func startWebServer(cmd *cobra.Command, args []string) {
@@ -31,7 +31,7 @@ func startWebServer(cmd *cobra.Command, args []string) {
 
 	go func() {
 		time.Sleep(time.Second * 2)
-		openBrowser(url)
+		browser.OpenURL(url)
 	}()
 
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -83,23 +83,4 @@ func handlerDisplay(w http.ResponseWriter, r *http.Request) {
 </html>
 	`, d.Date, d.DC.Voltage, d.DC.Current, d.DC.Power, d.AC.Voltage, d.AC.Current, d.AC.Power, d.EnergyDay, d.EnergyTotal, d.Temperature,
 		d.HeatFlux)
-}
-
-// from https://gist.github.com/hyg/9c4afcd91fe24316cbf0
-func openBrowser(url string) {
-	var err error
-
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", url).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case "darwin":
-		err = exec.Command("open", url).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
 }
