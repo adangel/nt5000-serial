@@ -15,6 +15,11 @@ import (
 
 var port serial.Port = nil
 
+func List() []string {
+	ports, _ := serial.GetPortsList()
+	return ports
+}
+
 func Connect(serialport string) {
 	mode := &serial.Mode{
 		BaudRate: 9600,

@@ -231,7 +231,13 @@ var Emulate bool
 var PollInterval uint8
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&SerialPort, "tty", "t", "/dev/ttyUSB0", "Serial port")
+	ports := serial.List()
+	defaultPort := "/dev/ttyUSB0"
+	if len(ports) > 0 {
+		defaultPort = ports[0]
+	}
+
+	rootCmd.PersistentFlags().StringVarP(&SerialPort, "tty", "t", defaultPort, "Serial port")
 	rootCmd.PersistentFlags().BoolVarP(&Emulate, "emulate", "e", false, "Don't use serial port at all, use fake data")
 
 	cmdWeb.Flags().StringVarP(&Port, "port", "p", "8080", "TCP port to listen on")
