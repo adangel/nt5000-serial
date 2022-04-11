@@ -92,7 +92,6 @@ var cmdDatetime = &cobra.Command{
 			log.Println("Reading current date...")
 			if emulate {
 				now := time.Now().Local()
-				fmt.Printf("now.Year(): %v\n", now.Year())
 				buff[0] = byte(now.Year() - 2000)
 				buff[1] = byte(now.Month())
 				buff[2] = byte(now.Day())
@@ -104,6 +103,11 @@ var cmdDatetime = &cobra.Command{
 				serial.Send([]byte("\x00\x01\x06\x01\x08"))
 				serial.Receive(buff)
 				serial.Disconnect()
+			}
+
+			err := protocol.VerifyChecksum(buff)
+			if err != nil {
+				log.Print(err)
 			}
 
 			t := time.Date(int(buff[0])+2000, time.Month(buff[1]), int(buff[2]), int(buff[3]), int(buff[4]), 0, 0, time.Local)
@@ -175,40 +179,21 @@ func getDataPoint() protocol.DataPoint {
 	buff := make([]byte, 13)
 
 	if emulate {
-		buff = []byte("\x8e\x11\x82\x06\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c")
+		buff = []byte("\x8e\x11\x82\x06\x46\x05\x06\x07\x08\x09\x0a\x0b\xa5")
 	} else {
 		serial.Send([]byte("\x00\x01\x02\x01\x04"))
 		serial.Receive(buff)
 	}
 
-	var udc float32 = float32(buff[0])*2.8 + 100.0
-	var idc float32 = float32(buff[1]) * 0.08
-	var uac float32 = float32(buff[2]) + 100.0
-	var iac float32 = float32(buff[3]) * 0.120
-	var temp float32 = float32(buff[4]) - 40.0
-	var wd float32 = (float32(buff[6])*256 + float32(buff[7])) / 1000.0
-	var wtot float32 = float32(buff[8])*256 + float32(buff[9])
-	var flux float32 = float32(buff[5]) * 6.0
-
-	d := protocol.DataPoint{
-		Date: time.Now().Local().Format(time.ANSIC),
-		DC: protocol.Measurement{
-			Voltage: udc,
-			Current: idc,
-			Power:   (udc * idc) / 1000,
-		},
-		AC: protocol.Measurement{
-			Voltage: uac,
-			Current: iac,
-			Power:   (uac * iac) / 1000,
-		},
-
-		Temperature: temp,
-		HeatFlux:    flux,
-		EnergyDay:   wd,
-		EnergyTotal: wtot,
+	err := protocol.VerifyChecksum(buff)
+	if err != nil {
+		log.Print(err)
 	}
 
+	d, err := protocol.Convert(buff)
+	if err != nil {
+		log.Printf("Invalid data received: %v\n", err)
+	}
 	return d
 }
 
@@ -222,13 +207,9 @@ func readSerialNumber() string {
 		serial.Receive(buff)
 	}
 
-	chksum := 0
-	for i := 0; i < 12; i++ {
-		chksum += int(buff[i])
-	}
-	chksum = chksum % 256
-	if buff[12] != byte(chksum) {
-		fmt.Printf("invalid checksum. expected 0x%02x but was 0x%02x\n", chksum, buff[12])
+	err := protocol.VerifyChecksum(buff)
+	if err != nil {
+		log.Print(err)
 	}
 
 	return string(buff[:12])
@@ -244,13 +225,9 @@ func readProtocol() string {
 		serial.Receive(buff)
 	}
 
-	chksum := 0
-	for i := 0; i < 12; i++ {
-		chksum += int(buff[i])
-	}
-	chksum = chksum % 256
-	if buff[12] != byte(chksum) {
-		fmt.Printf("invalid checksum. expected 0x%02x but was 0x%02x\n", chksum, buff[12])
+	err := protocol.VerifyChecksum(buff)
+	if err != nil {
+		log.Print(err)
 	}
 
 	return string(buff[:6])
@@ -270,8 +247,8 @@ var cmdEmulator = &cobra.Command{
 
 		rand.Seed(time.Now().UnixNano())
 
-		var energyDay float32 = 0
-		var energyTotal float32 = 1000.0 * rand.Float32()
+		d := protocol.DataPoint{}
+		d.EnergyTotal = 1000.0 * rand.Float32()
 		var lastReading int64 = 0
 
 		for {
@@ -290,39 +267,28 @@ var cmdEmulator = &cobra.Command{
 			switch buff[2] {
 			case 0x02: // read data
 				fmt.Printf("Read data\n")
-				response = make([]byte, 13)
-				power := 4500.0 * rand.Float32()
 
-				udc := float32(500.0)
-				idc := power / udc
-				response[0] = byte((udc - 100.0) / 2.8)
-				response[1] = byte(idc / 0.08)
-
-				uac := float32(230.0)
-				iac := power / uac
-				response[2] = byte(uac - 100.0)
-				response[3] = byte(iac / 0.120)
-
-				temp := 60*rand.Float32() - 20 // between -20°C/+40°C
-				response[4] = byte(temp + 40)
-
-				response[5] = byte(100 * rand.Float32())
+				d.DC.Power = 4500.0 * rand.Float32()
+				d.DC.Voltage = float32(500.0)
+				d.DC.Current = d.DC.Power / d.DC.Voltage
+				d.AC.Power = d.DC.Power
+				d.AC.Voltage = float32(230.0)
+				d.AC.Current = d.AC.Power / d.AC.Voltage
+				d.Temperature = 60*rand.Float32() - 20 // between -20°C/+40°C
+				d.HeatFlux = 100 * rand.Float32()
 
 				now := time.Now().UnixMilli()
 				if lastReading > 0 {
 					millis := now - lastReading
-					energy := power * float32(millis) / 1000.0 / 3600.0 / 1000.0
-					energyDay += energy
-					energyTotal += energy
-					fmt.Printf("Energy %v Wh in %v ms\n", energy, millis)
-					fmt.Printf("Updated energyDay=%v\n", energyDay)
+					energy := d.DC.Power * float32(millis) / 1000.0 / 3600.0 / 1000.0
+					d.EnergyDay += energy
+					d.EnergyTotal += energy
+					log.Printf("Energy %v Wh in last %v ms\n", energy, millis)
+					log.Printf("Updated energyDay=%v\n", d.EnergyDay)
 				}
 				lastReading = now
 
-				response[6] = byte(energyDay * 1000.0 / 256.0)
-				response[7] = byte(energyDay * 1000.0)
-				response[8] = byte(energyTotal / 256.0)
-				response[9] = byte(energyTotal)
+				response = protocol.ConvertToByte(d)
 
 			case 0x06: // read time
 				fmt.Printf("Read time\n")
@@ -334,20 +300,15 @@ var cmdEmulator = &cobra.Command{
 				response[3] = byte(now.Hour())
 				response[4] = byte(now.Minute())
 			case 0x50: // set year
-				fmt.Printf("Set year\n")
-				fmt.Printf(" --> %v\n", int(buff[3])+2000)
+				fmt.Printf("Set year --> %v\n", int(buff[3])+2000)
 			case 0x51: // set month
-				fmt.Printf("Set month\n")
-				fmt.Printf(" --> %v\n", int(buff[3]))
+				fmt.Printf("Set month --> %v\n", int(buff[3]))
 			case 0x52: // set day
-				fmt.Printf("Set day\n")
-				fmt.Printf(" --> %v\n", int(buff[3]))
+				fmt.Printf("Set day --> %v\n", int(buff[3]))
 			case 0x53: // set hour
-				fmt.Printf("Set hour\n")
-				fmt.Printf(" --> %v\n", int(buff[3]))
+				fmt.Printf("Set hour --> %v\n", int(buff[3]))
 			case 0x54: // set minute
-				fmt.Printf("Set minute\n")
-				fmt.Printf(" --> %v\n", int(buff[3]))
+				fmt.Printf("Set minute --> %v\n", int(buff[3]))
 			case 0x08: // read serial
 				fmt.Printf("Read serial number\n")
 				response = []byte("1533A5012345\x00")
@@ -360,7 +321,7 @@ var cmdEmulator = &cobra.Command{
 
 			if response != nil {
 				if len(response) != 13 {
-					log.Fatalf("response array has length %v, expected 13\n", len(response))
+					log.Fatalf("Response array has length %v, expected 13\n", len(response))
 				}
 
 				protocol.CalculateChecksum(response)
@@ -384,10 +345,10 @@ func setupCloseHandler() {
 }
 
 func main() {
-	rootCmd.PersistentFlags().StringVarP(&serialport, "tty", "t", "/dev/ttyUSB0", "serial port")
-	rootCmd.PersistentFlags().BoolVarP(&emulate, "emulate", "e", false, "Don't use serial port, use fake data")
+	rootCmd.PersistentFlags().StringVarP(&serialport, "tty", "t", "/dev/ttyUSB0", "Serial port")
+	rootCmd.PersistentFlags().BoolVarP(&emulate, "emulate", "e", false, "Don't use serial port at all, use fake data")
 
-	cmdWeb.Flags().StringVarP(&port, "port", "p", "8080", "port to listen on")
+	cmdWeb.Flags().StringVarP(&port, "port", "p", "8080", "TCP port to listen on")
 	cmdDatetime.Flags().BoolVarP(&settime, "set", "s", false, "Sets the date and time")
 	cmdDisplay.Flags().Uint8VarP(&pollInterval, "poll", "n", 5, "Poll every n seconds")
 	cmdWeb.Flags().Uint8VarP(&pollInterval, "poll", "n", 5, "Poll every n seconds")
