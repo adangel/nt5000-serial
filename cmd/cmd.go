@@ -48,35 +48,35 @@ var cmdDatetime = &cobra.Command{
 
 			buff := make([]byte, 5)
 			buff[0] = 0x00
-			buff[1] = 0x01
+			buff[1] = 0xff
 
 			// year
-			buff[2] = 0x50
+			buff[2] = 0x32
 			buff[3] = byte(now.Year() - 2000)
 			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			// month
-			buff[2] = 0x51
+			buff[2] = 0x33
 			buff[3] = byte(now.Month())
 			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			// day
-			buff[2] = 0x52
+			buff[2] = 0x34
 			buff[3] = byte(now.Day())
 			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			// hour
-			buff[2] = 0x53
-			buff[3] = byte(now.Hour())
+			buff[2] = 0x35
+			buff[3] = byte(now.Hour() + 1)
 			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
 			// minute
-			buff[2] = 0x54
-			buff[3] = byte(now.Minute())
+			buff[2] = 0x36
+			buff[3] = byte(now.Minute() + 1)
 			protocol.CalculateChecksum(buff)
 			serial.Send(buff)
 
@@ -192,16 +192,16 @@ var cmdEmulator = &cobra.Command{
 			case 0x06: // read time
 				log.Printf("Read time\n")
 				response = emulator.CurrentTimeBytes()
-			case 0x50: // set year
+			case 0x32: // set year
 				log.Printf("Set year --> %v\n", int(buff[3])+2000)
-			case 0x51: // set month
+			case 0x33: // set month
 				log.Printf("Set month --> %v\n", int(buff[3]))
-			case 0x52: // set day
+			case 0x34: // set day
 				log.Printf("Set day --> %v\n", int(buff[3]))
-			case 0x53: // set hour
-				log.Printf("Set hour --> %v\n", int(buff[3]))
-			case 0x54: // set minute
-				log.Printf("Set minute --> %v\n", int(buff[3]))
+			case 0x35: // set hour
+				log.Printf("Set hour --> %v\n", int(buff[3])-1)
+			case 0x36: // set minute
+				log.Printf("Set minute --> %v\n", int(buff[3])-1)
 			case 0x08: // read serial
 				log.Printf("Read serial number\n")
 				response = []byte("1533A5012345\x00")

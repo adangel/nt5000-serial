@@ -116,12 +116,12 @@ Receive: 13 bytes in buffer
 2. IDC (current DC): buffer[1]*0.08, unit: A
 3. UAC (voltage AC): buffer[2]+100.0, unit: V
 4. IAC (current AC): buffer[3]*0.120, unit: A
-5. Temperature: buffer[4]-40.0, unit: °C
+5. Temperature: buffer[4]-40.0, unit: °C - if not connected: \x01
 6. PDC (Power DC): ($udc*$idc)/1000, unit: kW
 7. PAC (Power AC): ($uac*$iac)/1000, unit: kW
 8. Energy Today: (buffer[6] * 256 + buffer[7])/1000, unit: kWh
 9. Energy Total: buffer[8] * 256 + buffer[9], unit: kWh
-10. Heat flux: buffer[5]*6.0, unit: W/m^2
+10. Heat flux: buffer[5]*6.0, unit: W/m^2 - if not connected: \x01
 
 ### Read time
 
@@ -139,13 +139,16 @@ Remaining 7 bytes are zero, 13th (last) byte is checksum.
 ### Set time
 
 Multiple commands:
-1. Set year: "\x00\x01\x50"
-2. Set month: "\x00\x01\x51"
-3. Set day: "\x00\x01\x52"
-4. Set hour: "\x00\x01\x53"
-5. Set minute: "\x00\x01\x54"
+1. Set year: "\x00\xff\x32"
+2. Set month: "\x00\xff\x33"
+3. Set day: "\x00\xff\x34"
+4. Set hour: "\x00\xff\x35"
+5. Set minute: "\x00\xff\x36"
 
 4th byte is the actual value, 5th byte is checksum
+
+Note: When settings hour or minute, one needs to be added to the value to be set.
+E.g. instead of 14:00, one needs to send 15:01.
 
 No response.
 

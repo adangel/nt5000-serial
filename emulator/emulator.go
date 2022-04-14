@@ -50,6 +50,9 @@ func CurrentTimeBytes() []byte {
 	data[2] = byte(now.Day())
 	data[3] = byte(now.Hour())
 	data[4] = byte(now.Minute())
+	for i := 5; i < 12; i++ {
+		data[i] = 0x0d
+	}
 
 	protocol.CalculateChecksum(data)
 
