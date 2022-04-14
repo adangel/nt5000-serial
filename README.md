@@ -38,6 +38,10 @@ In order to use a specific serial port:
 
 `./nt5000-serial datetime --set`
 
+**Display error log**
+
+`./nt5000-serial errors`
+
 **Display the current data**
 
 `./nt5000-serial display`
