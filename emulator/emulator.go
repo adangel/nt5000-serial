@@ -20,7 +20,7 @@ var lastReading int64 = 0
 func ProduceDataPoint() protocol.DataPoint {
 	now := time.Now()
 
-	emulatedData.Date = now.Local().Format(time.ANSIC)
+	emulatedData.Date = now.Local()
 	emulatedData.DC.Power = 4500.0 * rand.Float32()
 	emulatedData.DC.Voltage = float32(500.0)
 	emulatedData.DC.Current = emulatedData.DC.Power / emulatedData.DC.Voltage

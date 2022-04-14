@@ -6,7 +6,7 @@ import (
 )
 
 type DataPoint struct {
-	Date        string
+	Date        time.Time
 	DC          Measurement
 	AC          Measurement
 	Temperature float32
@@ -21,6 +21,11 @@ type Measurement struct {
 	Power   float32
 }
 
+type Error struct {
+	Date time.Time
+	Code byte
+}
+
 func CalculateChecksum(data []byte) {
 	last := len(data) - 1
 	chksum := 0
@@ -33,6 +38,10 @@ func CalculateChecksum(data []byte) {
 
 func VerifyChecksum(data []byte) error {
 	last := 12 // the 13th byte is always the checksum
+	// unless, it's the 5th
+	if len(data) < last {
+		last = len(data) - 1
+	}
 	checksum := 0
 	for i := 0; i < last; i++ {
 		checksum += int(data[i])
@@ -50,7 +59,7 @@ func Convert(data []byte) (DataPoint, error) {
 		return d, fmt.Errorf("Invalid data, expected 13 bytes, but got %d\n", len(data))
 	}
 
-	d.Date = time.Now().Local().Format(time.ANSIC)
+	d.Date = time.Now().Local()
 	d.DC.Voltage = float32(data[0])*2.8 + 100.0
 	d.DC.Current = float32(data[1]) * 0.08
 	d.DC.Power = (d.DC.Voltage * d.DC.Current) / 1000

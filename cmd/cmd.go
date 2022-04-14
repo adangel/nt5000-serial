@@ -109,6 +109,34 @@ var cmdDatetime = &cobra.Command{
 	},
 }
 
+var cmdErrors = &cobra.Command{
+	Use:   "errors",
+	Short: "Read error memory",
+	Run: func(cmd *cobra.Command, args []string) {
+		log.Printf("Using serial port %s", SerialPort)
+
+		log.Println("Reading error memory...")
+		if !Emulate {
+			serial.Connect(SerialPort)
+		}
+		errors := serial.ReadErrors(Emulate)
+		if !Emulate {
+			serial.Disconnect()
+		}
+
+		count := 0
+		for i, v := range errors {
+			if !v.Date.IsZero() {
+				log.Printf("Error %02d: Date: %v Code: 0x%02x\n", i+1, v.Date.Format(time.ANSIC), v.Code)
+				count++
+			}
+		}
+		if count == 0 {
+			log.Printf("No errors found\n")
+		}
+	},
+}
+
 var cmdDisplay = &cobra.Command{
 	Use:   "display",
 	Short: "Display current reading on the command line",
@@ -214,6 +242,12 @@ var cmdEmulator = &cobra.Command{
 			case 0x09: // read protocol + firmware
 				log.Printf("Read protocol + firmware\n")
 				response = []byte("111-23\x00\x00\x00\x00\x00\x00\x00")
+			case 0x01: // read errors
+				log.Printf("Read errors\n")
+				response = make([]byte, 13)
+				for i := 0; i < 12; i++ {
+					response[i] = 0x0d
+				}
 			default:
 				log.Printf("Unknown command: %v\n", buff)
 			}
@@ -256,6 +290,7 @@ func init() {
 	rootCmd.AddCommand(cmdDatetime)
 	rootCmd.AddCommand(cmdDisplay)
 	rootCmd.AddCommand(cmdEmulator)
+	rootCmd.AddCommand(cmdErrors)
 }
 
 func Execute(version string) error {

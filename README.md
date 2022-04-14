@@ -171,6 +171,25 @@ firmware version: bytes 3-12
 
 "\x0d" is a fill byte and can be ignored.
 
+### Read error memory
+
+Send: "\x00\x01\x01\x01\x03"
+Response: 12 bytes + checksum
+
+Bytes:
+1: month
+2: day
+3: hour
+4: minute
+5: error code. 0x11 = fault 004 / frequency
+6: year
+
+bytes 7-12: next error
+
+byte 13: checksum
+
+Next errors: \x00\0x01\0x02 up to \x00\x01\x05 -> in total there are 10 memory slots.
+
 ### Read monthly aggregated data
 
 *Note:* This is not implemented

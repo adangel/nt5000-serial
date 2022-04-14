@@ -192,3 +192,61 @@ func ReadProtocolAndFirmware(emulate bool) (string, string) {
 
 	return protocol, firmware
 }
+
+func ReadErrors(emulate bool) []protocol.Error {
+	var result []protocol.Error = make([]protocol.Error, 0, 10)
+
+	for i := 1; i <= 5; i++ {
+		result = append(result, readSingleError(emulate, uint8(i))...)
+	}
+	return result
+}
+
+func readSingleError(emulate bool, slot uint8) []protocol.Error {
+	var err error
+	buff := make([]byte, 13)
+	if emulate {
+		for i := 0; i < 12; i++ {
+			buff[i] = 0x0d
+		}
+		if slot == 1 {
+			now := time.Now().Local()
+			buff[0] = byte(now.Month())
+			buff[1] = byte(now.Day())
+			buff[2] = 20   // hour
+			buff[3] = 3    // minute
+			buff[4] = 0x11 // error code
+			buff[5] = byte(now.Year() - 2000)
+		}
+		protocol.CalculateChecksum(buff)
+	} else {
+		req := []byte("\x00\x01\x01")
+		req = append(req, byte(slot), 0x00)
+		protocol.CalculateChecksum(req)
+		Send(req)
+		buff, err = Receive()
+		if err != nil {
+			log.Print(err)
+		}
+	}
+
+	err = protocol.VerifyChecksum(buff)
+	if err != nil {
+		log.Print(err)
+	}
+
+	var result []protocol.Error
+	if buff[0] != 0x0d {
+		result = append(result, protocol.Error{
+			Date: time.Date(int(buff[5])+2000, time.Month(buff[0]), int(buff[1]), int(buff[2]), int(buff[3]), 0, 0, time.Local),
+			Code: buff[4],
+		})
+	}
+	if buff[6] != 0x0d {
+		result = append(result, protocol.Error{
+			Date: time.Date(int(buff[11])+2000, time.Month(buff[6]), int(buff[7]), int(buff[8]), int(buff[9]), 0, 0, time.Local),
+			Code: buff[10],
+		})
+	}
+	return result
+}

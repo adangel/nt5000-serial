@@ -45,7 +45,7 @@ func TestConvert(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(point.Date) == 0 {
+	if point.Date.IsZero() {
 		t.Fatalf("Date is missing")
 	}
 	assert(t, "DC.Voltage", 497.6, point.DC.Voltage)
