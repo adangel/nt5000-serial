@@ -32,7 +32,7 @@ func CalculateChecksum(data []byte) {
 }
 
 func VerifyChecksum(data []byte) error {
-	last := len(data) - 1
+	last := 12 // the 13th byte is always the checksum
 	checksum := 0
 	for i := 0; i < last; i++ {
 		checksum += int(data[i])

@@ -82,6 +82,7 @@ var cmdDatetime = &cobra.Command{
 
 			serial.Disconnect()
 		} else {
+			var err error
 			buff := make([]byte, 13)
 
 			log.Println("Reading current date...")
@@ -90,11 +91,14 @@ var cmdDatetime = &cobra.Command{
 			} else {
 				serial.Connect(SerialPort)
 				serial.Send([]byte("\x00\x01\x06\x01\x08"))
-				serial.Receive(buff)
+				buff, err = serial.Receive()
+				if err != nil {
+					log.Print(err)
+				}
 				serial.Disconnect()
 			}
 
-			err := protocol.VerifyChecksum(buff)
+			err = protocol.VerifyChecksum(buff)
 			if err != nil {
 				log.Print(err)
 			}
@@ -123,7 +127,7 @@ var cmdDisplay = &cobra.Command{
 		}
 
 		serialnumber := serial.ReadSerialNumber(Emulate)
-		protocol := serial.ReadProtocol(Emulate)
+		protocol, firmware := serial.ReadProtocolAndFirmware(Emulate)
 
 		for {
 			data := serial.GetDataPoint(Emulate)
@@ -132,6 +136,7 @@ Date: %v
 
 Serial Number: %v
      Protocol: %v
+     Firmware: %v
 
  udc: % 8.1f V
  idc: % 8.1f A
@@ -145,7 +150,7 @@ temp: % 8.1f °C
 flux: % 8.1f W/m^2
 
 Polling every %v seconds. Abort with Ctlr+C
-`, data.Date, serialnumber, protocol,
+`, data.Date, serialnumber, protocol, firmware,
 				data.DC.Voltage, data.DC.Current, data.DC.Power,
 				data.AC.Voltage, data.AC.Current, data.AC.Power,
 				data.EnergyDay, data.EnergyTotal, data.Temperature,
@@ -172,7 +177,8 @@ var cmdEmulator = &cobra.Command{
 		buff := make([]byte, 5)
 
 		for {
-			err := serial.Receive(buff)
+			var err error
+			buff, err = serial.Receive()
 			if err != nil {
 				// ignore incomplete or no data
 				continue

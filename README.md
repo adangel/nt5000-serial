@@ -158,11 +158,18 @@ Send: "\x00\x01\x08\x01\x0A"
 
 Response: 12 bytes + checksum
 
+"\x0d" is a fill byte and can be ignored.
+
 ### Read Protocol and Firmware Version
 
 Send: "\x00\x01\x09\x01\x0B"
 
-Response: 6 bytes + 6 null bytes + checksum
+Response: 12 bytes + checksum
+
+protocol: first two bytes
+firmware version: bytes 3-12
+
+"\x0d" is a fill byte and can be ignored.
 
 ### Read monthly aggregated data
 

@@ -19,6 +19,7 @@ var currentData protocol.DataPoint
 var basicInfo struct {
 	serialnumber string
 	protocol     string
+	firmware     string
 }
 
 func StartWebServer(port string, pollInterval uint8, serialPort string, emulate bool) {
@@ -30,7 +31,7 @@ func StartWebServer(port string, pollInterval uint8, serialPort string, emulate 
 		serial.Connect(serialPort)
 	}
 	basicInfo.serialnumber = serial.ReadSerialNumber(emulate)
-	basicInfo.protocol = serial.ReadProtocol(emulate)
+	basicInfo.protocol, basicInfo.firmware = serial.ReadProtocolAndFirmware(emulate)
 	updateDataInBackground(pollInterval, emulate)
 
 	http.Handle("/metrics", promhttp.Handler())
@@ -105,6 +106,7 @@ tr:first-child td {
 <dl>
   <dt>Serial number:</dt><dd>%s</dd>
   <dt>Protocol:</dt><dd>%s</dd>
+  <dt>Firmware:</dt><dd>%s</dd>
 </dl>
 
 <table>
@@ -122,7 +124,7 @@ tr:first-child td {
 </table>
 </body>
 </html>
-	`, basicInfo.serialnumber, basicInfo.protocol,
+	`, basicInfo.serialnumber, basicInfo.protocol, basicInfo.firmware,
 		d.Date,
 		d.DC.Voltage, d.DC.Current, d.DC.Power,
 		d.AC.Voltage, d.AC.Current, d.AC.Power,

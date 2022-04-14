@@ -62,15 +62,15 @@ func Send(data []byte) {
 		log.Fatalf("Couldn't send all bytes, only %v of %v bytes sent\n", n, len(data))
 	}
 
-	log.Printf("Sent %v bytes\n", n)
+	log.Printf("Sent %v bytes: %x\n", n, data)
 }
 
-func Receive(data []byte) error {
+func Receive() ([]byte, error) {
 	isConnected()
 
-	port.SetReadTimeout(time.Second * 1)
+	port.SetReadTimeout(time.Millisecond * 250)
 
-	index := 0
+	result := make([]byte, 0, 26)
 
 	for {
 		readbuff := make([]byte, 13)
@@ -80,24 +80,20 @@ func Receive(data []byte) error {
 			break
 		}
 		if n == 0 {
+			log.Printf("Timeout after %v bytes\n", len(result))
 			break
 		}
-		log.Printf("Received %v bytes: %v\n", n, readbuff[:n])
-		for i := 0; i < n; i++ {
-			data[index] = readbuff[i]
-			index++
-		}
-		if index == len(data) {
-			log.Printf("Received complete response: %v\n", data)
-			break
-		}
+		result = append(result, readbuff[:n]...)
+		log.Printf("Received %v bytes (0x%x)\n", n, readbuff[:n])
 	}
 
 	var err error = nil
-	if index != len(data) {
-		err = fmt.Errorf("Didn't receive all data, only %v of %v bytes received\n", index, len(data))
+	if len(result) == 0 {
+		err = fmt.Errorf("Didn't receive any data\n")
+	} else {
+		log.Printf("Received %v bytes: 0x%x\n", len(result), result)
 	}
-	return err
+	return result, err
 }
 
 // see https://golangcode.com/handle-ctrl-c-exit-in-terminal/
@@ -113,16 +109,20 @@ func SetupCloseHandler() {
 }
 
 func GetDataPoint(emulate bool) protocol.DataPoint {
+	var err error
 	buff := make([]byte, 13)
 
 	if emulate {
 		buff = protocol.ConvertToByte(emulator.ProduceDataPoint())
 	} else {
 		Send([]byte("\x00\x01\x02\x01\x04"))
-		Receive(buff)
+		buff, err = Receive()
+		if err != nil {
+			log.Print(err)
+		}
 	}
 
-	err := protocol.VerifyChecksum(buff)
+	err = protocol.VerifyChecksum(buff)
 	if err != nil {
 		log.Print(err)
 	}
@@ -135,37 +135,60 @@ func GetDataPoint(emulate bool) protocol.DataPoint {
 }
 
 func ReadSerialNumber(emulate bool) string {
+	var err error
 	buff := make([]byte, 13)
 
 	if emulate {
 		buff = []byte("1533A5012345\x71")
 	} else {
 		Send([]byte("\x00\x01\x08\x01\x0A"))
-		Receive(buff)
+		buff, err = Receive()
+		if err != nil {
+			log.Print(err)
+		}
 	}
 
-	err := protocol.VerifyChecksum(buff)
+	err = protocol.VerifyChecksum(buff)
 	if err != nil {
 		log.Print(err)
 	}
 
-	return string(buff[:12])
+	var serialnumber string = ""
+	for i := 0; i < 12; i++ {
+		if buff[i] != 0x0d {
+			serialnumber += string(buff[i])
+		}
+	}
+	return serialnumber
 }
 
-func ReadProtocol(emulate bool) string {
+func ReadProtocolAndFirmware(emulate bool) (string, string) {
+	var err error
 	buff := make([]byte, 13)
 
 	if emulate {
 		buff = []byte("111-23\x00\x00\x00\x00\x00\x00\x25")
 	} else {
 		Send([]byte("\x00\x01\x09\x01\x0B"))
-		Receive(buff)
+		buff, err = Receive()
+		if err != nil {
+			log.Print(err)
+		}
 	}
 
-	err := protocol.VerifyChecksum(buff)
+	err = protocol.VerifyChecksum(buff)
 	if err != nil {
 		log.Print(err)
 	}
 
-	return string(buff[:6])
+	var protocol string = string(buff[0:2])
+	var firmware string = ""
+
+	for i := 2; i < 11; i++ {
+		if buff[i] != 0x0d {
+			firmware += string(buff[i])
+		}
+	}
+
+	return protocol, firmware
 }
